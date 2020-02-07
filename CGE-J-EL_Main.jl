@@ -22,15 +22,20 @@ YiOut =  sum(IOi, dims=2) + Kdi + Ldi  #initial gross Total income (by sector)
 YiIn = rKi * Kei + wLi * Lei    #initial Income level
 TechCf = IOi./YiOut #this is transpose of EcoMod...
 
-KLsubselasi = [.8,1.2]
+KLsubselasi = [.8,1.2] # initial 
+YinelasCommodsi = [.9,1.1] # inititial income elasticity of commodities demand
+frisch = -1.1 #  expenditure elasticity of the marginal utility of expenditure
 
 CPi = []
 for i in 1:length(sectors)
     push!(CPi, 1)
 end                    #initial Commodity Price Level (1 for each sector commod)
 
-HHUexp = CPi.* Cdi / YiIn
-HHUi = prod(Cdi.^HHUexp)        #initial HouseHold Utility level (mod 2 = 125.373)
+HHUlesexp = YinelasCommodsi .* CPi.* Cdi / YiIn
+#HHUlesexpTot = sum(HHUlesexp) #gratuitous?
+HHUlesexp = HHUlesexp/sum(HHUlesexp) #rescale marginal budgetshares by sum
+HHCsubsist = Cdi + HHUlesexp*YiIn./(CPi*frisch)
+HHUi = prod((Cdi-HHCsubsist).^HHUlesexp)        #initial HouseHold Utility level (mod 2 = 125.373)
 
 CESdist = 1 ./(1 .+(wLi/rKi)*(Kdi ./Ldi) .^(-1 ./KLsubselasi))  #maybe not dot (Kdi /Ldi)
 PFeFs = YiOut ./(CESdist .*Kdi .^((KLsubselasi .- 1) ./KLsubselasi) +
@@ -52,7 +57,8 @@ PFeFs = YiOut ./(CESdist .*Kdi .^((KLsubselasi .- 1) ./KLsubselasi) +
 @NLconstraint(CGE_EL, Ke == Kei)
 @variable(CGE_EL, HHi, lower_bound = 0.001 * YiIn, start = YiIn, lower_bound=0)
 @NLconstraint(CGE_EL, EHHi, HHi == r * Ke + w * Le) #Income Definition
-@NLconstraint(CGE_EL, ECd[i = sectors], Pr_Commods[i] * Commodsd_HH[i] == HHUexp[i] * HHi) #Consumer commodity demand function (income =spending)
+@NLconstraint(CGE_EL, ECd[i = sectors], Pr_Commods[i] * Commodsd_HH[i] == Pr_Commods[i] * HHCsubsist[i] +
+ HHUlesexp[i] * (HHi - sum(HHCsubsist[j] * Pr_Commods[j] for j in commods))) #Consumer commodity demand function (income =spending)
 
 @NLconstraint(CGE_EL, EKd_f[i = sectors], Kd_f[i] == (YOut[i] / PFeFs[i]) * (CESdist[i]/r) ^KLsubselasi[i] *
     (CESdist[i] ^KLsubselasi[i] * r ^(1 -KLsubselasi[i]) + (1 - CESdist[i]) ^KLsubselasi[i] * w ^(1 -KLsubselasi[i])) ^
@@ -70,12 +76,14 @@ PFeFs = YiOut ./(CESdist .*Kdi .^((KLsubselasi .- 1) ./KLsubselasi) +
 @NLconstraint(CGE_EL, EPrInd, sum(Pr_Commods[i]*Cdi[i] for i in sectors)/sum(CPi[i]*Cdi[i] for i in sectors) == PrInd)
 #Utility
 @variable(CGE_EL, HHU, start = HHUi)
-@NLconstraint(CGE_EL, EHHU, HHU == prod(Commodsd_HH[i]^HHUexp[i] for i in sectors))
+@NLconstraint(CGE_EL, EHHU, HHU == prod((Cdi[i]-HHCsubsist[i])^HHUlesexp[i] for i in sectors))
 
 
 @variable(CGE_EL, Trick == 1)
 
 fix(w, wLi, force = true)
+fix(Ke, Kei, force = true)
+fix(Le, Lei, force = true )
 
 @NLobjective(CGE_EL, Max, Trick) #Numeraire from EcoMod...not clear exactly how to translate
 @time optimize!(CGE_EL)
