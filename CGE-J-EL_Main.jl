@@ -5,7 +5,10 @@ CGE_EL = Model(with_optimizer(Ipopt.Optimizer))
 # Input Output Table
 IOdata = CSV.read("IOdata.csv") #Careful Eli :: columns & rows transposed
 
-sectors = [1,2]
+sectors = Array{Int64}(undef,length(IOdata[1]))
+for i in 1:length(IOdata[1])
+    sectors[i] = i
+end
 commods = [1,2]
 
 # Initial Values
@@ -19,7 +22,20 @@ Invi = IOdata[sectors,:Invi]
 Kei = sum(Kdi)              #initial Kapital endowment
 Unempli = 10. # initial level of unemployment
 Lei = sum(Ldi) + Unempli             #initial Labour endowment
-IOi = [IOdata[sectors,:Sec1] IOdata[sectors,:Sec2]] # Input Output table (as array)
+# Loop to build IO square array from csv data with n sectors
+IOi = Array{Int64}(undef,length(sectors),length(sectors))  
+    for i in 1:length(sectors)
+        for j in 2:length(sectors)+1
+            IOi[i,j-1] = IOdata[i,j]
+        println(i)
+        end
+    end
+#[IOdata[sectors,:Sec1] IOdata[sectors,:Sec2]] # Input Output table (as array)
+
+CPi = []
+for i in 1:length(sectors)
+    push!(CPi, 1)
+end                    #initial Commodity Price Level (1 for each sector commod)
 
 YiOut =  sum(IOi, dims=2) + Kdi + Ldi  #initial gross Total income (by sector)
 YiIn = rKi * Kei + wLi * (Lei - Unempli)    #initial Income level
@@ -30,15 +46,10 @@ mps = HHSavi/YiIn
 
 TechCf = IOi./YiOut #this is transpose of EcoMod...
 
-KLsubselasi = [.8,1.2] # initial 
-YinelasCommodsi = [.9,1.1] # inititial income elasticity of commodities demand
+KLsubselasi = IOdata[sectors,:KLsubselasi] #[.8,1.2] # initial Kapital/Labor substitution elasticities
+YinelasCommodsi = IOdata[sectors,:YinelasCommodsi]# [.9,1.1] # inititial income elasticity of commodities demand
 frisch = -1.1 #  expenditure elasticity of the marginal utility of expenditure
 Phili = -.1
-
-CPi = []
-for i in 1:length(sectors)
-    push!(CPi, 1)
-end                    #initial Commodity Price Level (1 for each sector commod)
 
 HHUlesexp = YinelasCommodsi .* CPi.* Cdi / ConsBudgi
 #HHUlesexpTot = sum(HHUlesexp) #gratuitous?
