@@ -1,6 +1,8 @@
-﻿    ,Sec1,Sec2,Cdi,Invi,Total,KLsubselasi,YinelasCommodsi
-Sec1,5,40,50,5,100,.8,.9
-Sec2,15,20,150,15,200,1.2,1.1
-Kdi,60,50,,,,,
-Ldi,20,90,,,,,
-Total,100,200,,,,,
+﻿    ,Sec1,Sec2,Gov,Cdi,Invi,Total,KLsubselasi,YinelasCommodsi
+Sec1,5,40,20,50,5,120,.8,.9
+Sec2,15,20,50,146,15,246,1.2,1.1
+Kdi,60,50,60,,,,,
+TaxK,12,10,0,,,,,
+Ldi,20,90,120,,,,,
+TaxL,8,36,0,,,,,
+Total,120,246,250,,,,,
