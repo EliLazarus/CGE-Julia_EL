@@ -25,26 +25,27 @@ GKdi = IOdata["Kdi",:Gov]
 GLdi = IOdata["Ldi",:Gov]
 
 #Module 6: Data entered manually for initial match
-### TESTING
-GSavi = 0.
-TaxInRevi = 162. #Income tax
-UnemplBenRate = .5
-Transfi = 20.
-TransfOthi = 15.
-GovCdi = [20.,50.]
-TaxCRevi = [5.,37.]    #initial Consumption tax
+Gsavi = IOdata["SavInv",:Gov] # Government Savings (0: balanced budget, >0: surplus, <0: deficit )
+TaxInRevi = IOdata["TaxIn",:HH] #Inititial Income tax
+UnemplBenRate = IOdata[1,:UnemplBenRate] #What proportion wage HH gets if unemployed
+Transfi = IOdata["HH",:Gov] #Government direct tranfers to Households
+TransfOthi = 15. # Other Transfers... I don't understand where this fits in the SAM...
+GovCdi = IOdata[sectors,:Gov][][:] # Government purchased from firms 
+TaxCRevi = IOdata["TaxC", sectors][][:]    #initial Consumption tax
 TaxKRevi = IOdata["TaxK",sectors][][:]    #initial Kapital use tax
 TaxLRevi = IOdata["TaxL",sectors][][:]   #initial Payroll tax? (labour use)
 
 #create base nominal initial Commodity Price = 1 for each sector ##if is just for running single lines
 CPi = []; if length(CPi)<length(sectors); for i in 1:length(sectors); push!(CPi, 1); end; end #initial Commodity Price Level (1 for each sector commod)
 Cdi = IOdata[sectors,:Cdi][][:]  #initial Investment Demand for Commodities (from data)
-Invi = IOdata[sectors,:Invi][][:]#Initial Investment (from data)
-Kei = sum(Kdi) + GKdi            #initial Kapital endowment
-Unempli = 10.               #initial level of unemployment
+Invi = IOdata[sectors,:InvSav][][:]#Initial Investment (from data)
+Kei = sum(Kdi) + GKdi            #initial Kapital endowment (assume supply = demand?)
+Unempli = IOdata[1,:Unempli]               #initial level of unemployment
+# Unempli = 10.               #initial level of unemployment
 Lei = sum(Ldi) + GLdi + Unempli    #initial Labour endowment
 
-# Loop to build IO square array from csv data with n sectors
+# Loop to build IO square sector by sector array from csv data with n sectors
+# Important: Only works so far if sectors are the first columns and rows
 IOi = Array{Int64}(undef,length(sectors),length(sectors))
 for i in 1:length(sectors); 
     for j in 1:length(sectors)
@@ -64,21 +65,20 @@ TaxCRatei = TaxCRate    #initial Consumption tax rate (for Price Index)
 TaxInRate = TaxInRevi/YiIn
 
 #Factors
+frisch = IOdata[1,:Frisch] #  expenditure elasticity of the marginal utility of expenditure #how response the changes in utility of expenditure
+Phili = IOdata[1,:Philli] # (rate of) change in wages to (rate of) change in unemployment
+
 mps = HHSavi/(YiIn - TaxInRevi) #marginal propensity to save:Fixed: (initial savings as a proportion of initial income)
-#### 
-# IOtechCf = [.5 .2; .1 .1]
 IOtechCf = IOi./transpose(YiOuti) #Input Output coefficiencts of transformation note: this is now NOT a transpose of EcoMod...
 KLsubselasi = IOdata[sectors,:KLsubselasi][][:] #eg. [.8,1.2] # initial Kapital/Labor substitution elasticities
 YinelasCommodsi = IOdata[sectors,:YinelasCommodsi][][:]#eg. [.9,1.1] # inititial income elasticity of commodities demand #(How responsive demand for each commod to changes in income)
-frisch = -1.1 #  expenditure elasticity of the marginal utility of expenditure #how response the changes in utility of expenditure
-Phili = -0.10 # (rate of) change in wages to (rate of) change in unemployment
 HHUlesexpi = YinelasCommodsi[:] .*(1 .+ TaxCRate).* CPi.* Cdi / ConsBudgi #Initial marginal budget shares note:gams updates assignment but I added a (i) variable
 HHUlesexp = HHUlesexpi./sum(HHUlesexpi) #nested ELES exponents for HH utility (from initial marginal budget shares)
 HHCsubsist = Cdi + HHUlesexp*ConsBudgi./(CPi*frisch.*(1 .+ TaxCRate)) #(Stone-Geary!) subsistence quantity of consumption of each good 
 HHUi = prod((Cdi-HHCsubsist).^HHUlesexp)        #initial HouseHold Utility level (mod 5 = 108.14)
 BankUexp = Invi .* CPi / TotSavi  #(Cobb-Douglas) exponenent for Bank's Utility function 
 CESdist = 1 ./(1 .+((1 .+TaxLRate)*wLi)./((1 .+TaxKRate)*rKi).*(Kdi ./Ldi).^(-1 ./KLsubselasi)) #Constant Elasticity of substitution
-# parameters in the production function (ie. how much labor to Kapital)
+# parameters in the production function (ie. how much labor compared to Kapital)
 PFeFs = YiOuti ./(CESdist .*Kdi .^((KLsubselasi .- 1) ./KLsubselasi) +
     (1 .-CESdist) .*Ldi .^((KLsubselasi .- 1) ./KLsubselasi)) .^
     (KLsubselasi./(KLsubselasi .-1))  #Production Effiency Factor (CES production)
@@ -143,9 +143,6 @@ GovUExpK = rKi * GKdi/(TaxTotRevi-Transfi-PrIndi*GSavi)
 @NLconstraint(CGE_EL, EHHSav, HHSav == mps * (HHI - TaxInRate * HHI)) # Household Savings, proportion of Income
 @NLconstraint(CGE_EL, ESav, TotSav == HHSav + GSav * PrInd) # Total Savings .....
 
-#Delete? I think this is redundant
-# @NLconstraint(CGE_EL, ETotSav, TotSav == mps*HHI) # Total Savings (Fixed fraction of Income)
-### TESTing, commenting out Optimal solution, and close to correct values....
 @NLconstraint(CGE_EL, EGCd[i = sectors], Pr_Commods[i] * GovCd[i] == GovUExp[i]*(TaxTotRev - Transf - GSav * PrInd)) #
 @NLconstraint(CGE_EL, EGKd, r * GKd == GovUExpK*(TaxTotRev - Transf - GSav * PrInd)) #
 @NLconstraint(CGE_EL, EGLd, w * GLd == GovUExpL*(TaxTotRev - Transf - GSav * PrInd)) #
@@ -164,13 +161,12 @@ GovUExpK = rKi * GKdi/(TaxTotRevi-Transfi-PrIndi*GSavi)
 @NLconstraint(CGE_EL, EPhil, ((w/PrInd)/(wLi/PrIndi)-1) == Phili * ((Unempl/Le)/(Unempli/Lei)-1)) # Wage(/unemployment) Curve
 
 @variable(CGE_EL, Trick, start = 1)
-# @NLconstraint(CGE_EL, ETrick, Trick == 1)
 
 #Utility
 @variable(CGE_EL, HHU, start = HHUi)
 
 fix(Ke, Kei, force = true)
-fix(Le, Lei*1.05, force = true)
+fix(Le, Lei, force = true)
 fix(TransfOth, TransfOthi, force = true)
 fix(GSav, GSavi, force = true)
 fix(w, wLi, force = true)
