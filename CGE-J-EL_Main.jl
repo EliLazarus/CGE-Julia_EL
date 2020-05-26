@@ -7,7 +7,7 @@ CGE_EL = Model(with_optimizer(Ipopt.Optimizer))#with_optimizer()
 "A. Wächter and L. T. Biegler, On the Implementation of a Primal-Dual Interior Point Filter Line Search Algorithm for Large-Scale Nonlinear Programming, Mathematical Programming 106(1), pp. 25-57, 2006 (preprint)"
 
 # SAM Table
-SAMdata = CSV.read("SAMdataPlusTest.csv")
+SAMdata = CSV.read("SAMdataPlus.csv")
 SAMdata = NamedArray(convert(Matrix,SAMdata[1:size(SAMdata,1),2:size(SAMdata,2)]),
     (SAMdata[:,1],names(SAMdata[2:size(SAMdata,2)]))) #Named Array to use row names
 #set # sectors from data
