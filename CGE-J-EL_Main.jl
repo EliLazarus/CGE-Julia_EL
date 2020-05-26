@@ -13,20 +13,17 @@ SAMdata = NamedArray(convert(Matrix,SAMdata[1:size(SAMdata,1),2:size(SAMdata,2)]
 #set # sectors from data
 numsectors = count(x -> occursin("Sec", string(x)), names(SAMdata[:1,:])[1])
 sectors = Array{Int64}(undef, 1, numsectors); for i in 1:numsectors; sectors[i] = i; end
-# # commodities set manually so far
-numcommonds = 3
+numcommonds = convert(Int64,SAMdata[1,:numcommonds]) #So far as factor in data sheet (until commods get own SAM row/columns)
 commods = Array{Int64}(undef, 1, numcommonds); for i in 1:numcommonds; commods[i] = i; end
 
 # Initial Values
 rKi = 1                     #initial return to Kapital
 wLi = 1                     #initial return to Labor (initial wage)
 PrIndi = 1                  #Baseline for Price change/inflation
-# Oh, def put this in the SAM - this should be x # sectors, right?!
-Pr_W_Im_foreignCurri = [1., 1., 1.] # Initial prices of Imports at World price in foreign currency
-
-Pr_W_Exp_foreignCurri = [1., 1., 1.] # Initial prices of Exports at World price in foreign currency
-Pr_Commods_toHomei = [1., 1.,1.] # Initial prices of Domestic commodity/output of firm to domestic market
-Pr_CombCommods_toHomei = [1., 1.,1.] # Initial Prices of Combined Domestic and Foreign commodities to home market
+Pr_W_Im_foreignCurri = SAMdata[sectors,:Pr_W_Im_foreignCurri][][:] # Initial prices of Imports at World price in foreign currency
+Pr_W_Exp_foreignCurri = SAMdata[sectors,:Pr_W_Exp_foreignCurri][][:] # Initial prices of Exports at World price in foreign currency
+Pr_Commods_toHomei = SAMdata[sectors,:Pr_Commods_toHomei][][:] # Initial prices of Domestic commodity/output of firm to domestic market
+Pr_CombCommods_toHomei = SAMdata[sectors,:Pr_CombCommods_toHomei][][:] # Initial Prices of Combined Domestic and Foreign commodities to home market
 Kdi = SAMdata["Kdi",sectors][][:]  #initial Kapital demand
 Ldi = SAMdata["Ldi",sectors][][:]  #initial Labour demand
 Cdi = SAMdata["Cdi",sectors][][:]  #initial Consumer Demand for Commodities (from data)
@@ -252,7 +249,8 @@ HHU = prod((JuMP.value(Commodsd_HH[i])-HHCsubsist[i])^HHUlesexp[i] for i in sect
 Walras = JuMP.value(sum(Ld_f[i] for i in sectors) + GLd + Unempl - Le)
 GovBudg = JuMP.value(TaxTotRev - Transf - sum(Pr_Commods[i]*GovCd[i] for i in sectors) - w*GLd - r*GKd)
 
-  #Look at some results
+#Module 7 ~ 1030 lines up to exercises
+#Look at some results
 CGE_EL
 print("w=             ",JuMP.value(w),"\n")
 print("r=             ",JuMP.value(r),"\n")
