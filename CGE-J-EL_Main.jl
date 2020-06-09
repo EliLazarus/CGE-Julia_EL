@@ -6,7 +6,7 @@ using CSV, NamedArrays, JuMP, Ipopt, DataFrames, XLSX
 CGE_EL = Model(with_optimizer(Ipopt.Optimizer))#with_optimizer()
 "A. Wächter and L. T. Biegler, On the Implementation of a Primal-Dual Interior Point Filter Line Search Algorithm for Large-Scale Nonlinear Programming, Mathematical Programming 106(1), pp. 25-57, 2006 (preprint)"
 
-# SAM Table
+# SAM Table from XLSX into a NamedArray
 SAMdataX = XLSX.readxlsx("SAMdataPlus.xlsx")
 SAMdataY = XLSX.gettable(SAMdataX["SAMdataPlus"], header=false)
 SAMdata = DataFrames.DataFrame(SAMdataY[1])
@@ -36,18 +36,18 @@ TaxInRevi = SAMdata["TaxIn","HH"] #Inititial Income tax
 UnemplBenRate = SAMdata[1,"UnemplBenRate"] #What proportion wage HH gets if unemployed
 Transfi = SAMdata["HH","Gov"] #Government direct tranfers to Households
 TransfOthi = 15. # Other Transfers... I don't understand where this fits in the SAM...
-GovCdi = SAMdata[sectors,"Gov"][][:] # Government purchased from firms 
-TaxCRevi = SAMdata["TaxC", sectors][][:]    #initial Consumption tax
+GovCdi = SAMdata[numsectors+1:numsectors+numcommonds,"Gov"][][:] # Government purchased from firms 
+TaxCRevi = SAMdata["TaxC", numsectors+1:numsectors+numcommonds][][:]    #initial Consumption tax
 TaxKRevi = SAMdata["TaxK",sectors][][:]    #initial Kapital use tax
 TaxLRevi = SAMdata["TaxL",sectors][][:]   #initial Payroll tax? (labour use)
 
 ForeignSavi = SAMdata["SavInv","RoW"]
 #create base nominal initial Commodity Price = 1 for each sector ##the if is just for running single lines during debugging etc
 CPi = []; if length(CPi)<length(sectors); for i in 1:length(sectors); push!(CPi, 1); end; end #initial Commodity Price Level (1 for each sector commod)
-Invi = SAMdata[sectors,"InvSav"][][:]        #Initial Investment (from data)
+Invi = SAMdata[numsectors+1:numsectors+numcommonds,"InvSav"][][:]        #Initial Investment (from data)
 Expi = SAMdata["Expi",sectors][][:]         #Initial Export demand (from data)
 Impi = SAMdata["Impi",sectors][][:]         #Initial Import demand (from data)
-TaxImpRevi = SAMdata["TaxImp",sectors][][:] #initial Import tax (tariff) revenue
+TaxImpRevi = SAMdata["TaxImp",numsectors+1:numsectors+numcommonds][][:] #initial Import tax (tariff) revenue
 Kei = sum(Kdi) + GKdi                       #initial Kapital endowment (assume supply = demand?)
 Unempli = SAMdata[1,"Unempli"]               #initial level of unemployment
 XRatei = SAMdata[1,"Xchangei"]               #initial exchange rate (1 obviously)
@@ -56,11 +56,11 @@ Lei = sum(Ldi) + GLdi + Unempli    #initial Labour endowment
 Pr_Exp_DomCurri = Pr_W_Exp_foreignCurri * XRatei # Export Prices
 
 # Loop to build IO square sector by sector array from csv data with n sectors
-# IMPORTANT: Only works so far if sectors are the first columns and rows
+# IMPORTANT: Now works for Commodities x Sectors, with sectors as first columns and rows and commods as next columns and rows
 IOi = Array{Int64}(undef,length(sectors),length(sectors))
-for i in 1:length(sectors); 
+for i in numsectors+1:numsectors+numcommonds; 
     for j in 1:length(sectors)
-        IOi[i,j] = SAMdata[i,j]; end; end
+        IOi[i-numsectors,j] = SAMdata[i,j]; end; end
 
 YOuti =  sum(IOi,dims=1)[:] + Kdi + TaxKRevi + Ldi + TaxLRevi  #initial gross Total income (by sector)
 Yout_toHomei = YOuti - Expi                         # Domestic consumption from domestic production (everything - exports)
@@ -80,7 +80,7 @@ Pr_Im_DomCurri = (1 .+ TaxImpRate) .* Pr_W_Im_foreignCurri * XRatei # Import pri
 
 #Factors
 frisch = SAMdata[1,"Frisch"]      # expenditure elasticity of the marginal utility of expenditure #how response the changes in utility of expenditure
-Phili = SAMdata[1,"Philli"]       # (rate of) change in wages to (rate of) change in unemployment
+Philli = SAMdata[1,"Philli"]       # (rate of) change in wages to (rate of) change in unemployment
 mps = HHSavi/(YIni - TaxInRevi)  # marginal propensity to save:Fixed: (initial savings as a proportion of initial income)
 IOtechCf = IOi./transpose(YOuti) # Input Output coefficiencts of transformation note: this is now NOT a transpose of EcoMod...
 ArmSubElasi = SAMdata[sectors,"ArmSubElasi"][][:]       # Initial sustitution elasticities of the Armington function (between foreign and domestic)
@@ -228,7 +228,7 @@ GovUExpK = rKi * GKdi/(TaxTotRevi-Transfi-PrIndi*GSavi)
 @NLconstraint(CGE_EL, EC[i = sectors], Commodsd_HH[i] + Inv[i] + sum(IOtechCf[i,j] * YOut[j] for j in commods) + GovCd[i]  ==
 YCombOut_toHome[i]) #Market clearing for commodities (Sum of consumption, investment [and production uses] equals Total Output)
 @NLconstraint(CGE_EL, EInv[i = sectors], Pr_CombCommods_toHome[i] * Inv[i] == BankUexp[i]*TotSav) # Investment Demand = Investment Supply
-@NLconstraint(CGE_EL, EPhil, ((w/PrInd)/(wLi/PrIndi)-1) == Phili * ((Unempl/Le)/(Unempli/Lei)-1)) # Wage:unemployment Curve
+@NLconstraint(CGE_EL, EPhil, ((w/PrInd)/(wLi/PrIndi)-1) == Philli * ((Unempl/Le)/(Unempli/Lei)-1)) # Wage:unemployment Curve
 @NLconstraint(CGE_EL, ETradeBal, sum(Imp[i] * Pr_W_Im_foreignCurri[i] for i in sectors) == 
 sum(Pr_W_Exp_foreignCurri[i]*Exp[i] for i in sectors) + ForeignSav) # Trade Balance: Imports = Exports + Foreign Savings (in foreign currency [just cos it's easier not to use exchange rates I guess])
 
@@ -245,7 +245,7 @@ fix(ForeignSav, ForeignSavi, force= true)
 fix(w, wLi, force = true)
 fix(Trick, 1, force = true)
 
-@NLobjective(CGE_EL, Min, Trick) #(Not) Numeraire from EcoMod...not clear exactly how to translate
+@NLobjective(CGE_EL, Max, Trick) #(Not) Numeraire from EcoMod...not clear exactly how to translate
 @time optimize!(CGE_EL)
 
 HHU = prod((JuMP.value(Commodsd_HH[i])-HHCsubsist[i])^HHUlesexp[i] for i in sectors) #Final HH Utility calculated AFTER model solved
