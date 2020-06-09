@@ -3,6 +3,7 @@ using CSV, NamedArrays, JuMP, Ipopt, DataFrames, XLSX
 
 "*COLUMN* accounts record *SPENDING*" # *ROW* acounts record *INCOME*
 
+montec = "yes"
 CGE_EL = Model(with_optimizer(Ipopt.Optimizer))#with_optimizer()
 "A. Wächter and L. T. Biegler, On the Implementation of a Primal-Dual Interior Point Filter Line Search Algorithm for Large-Scale Nonlinear Programming, Mathematical Programming 106(1), pp. 25-57, 2006 (preprint)"
 
@@ -49,7 +50,11 @@ Expi = SAMdata["Expi",sectors][][:]         #Initial Export demand (from data)
 Impi = SAMdata["Impi",sectors][][:]         #Initial Import demand (from data)
 TaxImpRevi = SAMdata["TaxImp",numsectors+1:numsectors+numcommonds][][:] #initial Import tax (tariff) revenue
 Kei = sum(Kdi) + GKdi                       #initial Kapital endowment (assume supply = demand?)
-Unempli = SAMdata[1,"Unempli"]               #initial level of unemployment
+if montec =="yes"
+    Unempli = rand(5:50)
+else
+    Unempli = SAMdata[1,"Unempli"]               #initial level of unemployment
+end
 XRatei = SAMdata[1,"Xchangei"]               #initial exchange rate (1 obviously)
 Lei = sum(Ldi) + GLdi + Unempli    #initial Labour endowment
 
@@ -252,6 +257,7 @@ HHU = prod((JuMP.value(Commodsd_HH[i])-HHCsubsist[i])^HHUlesexp[i] for i in sect
 Walras = JuMP.value(sum(Ld_f[i] for i in sectors) + GLd + Unempl - Le)
 GovBudg = JuMP.value(TaxTotRev - Transf - sum(Pr_Commods[i]*GovCd[i] for i in sectors) - w*GLd - r*GKd)
 
+
 #Look at some results
 CGE_EL
 print("w=             ",JuMP.value(w),"\n")
@@ -259,8 +265,16 @@ print("r=             ",JuMP.value(r),"\n")
 print("HHI=           ",JuMP.value(HHI),"\n")
 print("Ld_f[1]=       ",JuMP.value(Ld_f[1]),"\n")
 print("Ld_f[2]=       ",JuMP.value(Ld_f[2]),"\n")
+print("Ld_f[3]=       ",JuMP.value(Ld_f[3]),"\n")
+print("Ld_f[4]=       ",JuMP.value(Ld_f[4]),"\n")
+print("Ld_f[5]=       ",JuMP.value(Ld_f[5]),"\n")
+print("Ld_f[6]=       ",JuMP.value(Ld_f[6]),"\n")
 print("Kd_f[1]=       ",JuMP.value(Kd_f[1]),"\n")
 print("Kd_f[2]=       ",JuMP.value(Kd_f[2]),"\n")
+print("Kd_f[3]=       ",JuMP.value(Kd_f[3]),"\n")
+print("Kd_f[4]=       ",JuMP.value(Kd_f[4]),"\n")
+print("Kd_f[5]=       ",JuMP.value(Kd_f[5]),"\n")
+print("Kd_f[6]=       ",JuMP.value(Kd_f[6]),"\n")
 print("Pr_Commods[1]= ",JuMP.value(Pr_Commods[1]),"\n")
 print("Pr_Commods[2]= ",JuMP.value(Pr_Commods[2]),"\n")
 print("Commodsd_HH[1]=",JuMP.value(Commodsd_HH[1]),"\n")
