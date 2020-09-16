@@ -1,14 +1,17 @@
 using CSV, NamedArrays, JuMP, Ipopt, DataFrames, XLSX
 "An open source Computerised General Equlibrium model"
 
-"*COLUMN* accounts record *SPENDING*" # *ROW* acounts record *INCOME*
+"*COLUMN* accounts record *SPENDING*=Demand" # *ROW* acounts record *INCOME*=Supply
 
-montec = "yes"
+montec = "no" #"yes"
 CGE_EL = Model(with_optimizer(Ipopt.Optimizer))#with_optimizer()
 "A. Wächter and L. T. Biegler, On the Implementation of a Primal-Dual Interior Point Filter Line Search Algorithm for Large-Scale Nonlinear Programming, Mathematical Programming 106(1), pp. 25-57, 2006 (preprint)"
 
 # SAM Table from XLSX into a NamedArray
-SAMdataX = XLSX.readxlsx("SAMdataPlus.xlsx")
+SAMdataX = XLSX.readxlsx("SAMdataPlus4.xlsx") #Infeasible
+# SAMdataX = XLSX.readxlsx("SAMdataPlusBEA6.xlsx") #Infeasible
+# SAMdataX = XLSX.readxlsx("SAMdataPlus.xlsx") #Infeasible
+# SAMdataX = XLSX.readxlsx("SAMdataPlus-BEA.xlsx") #Too many degrees of Freedom
 SAMdataY = XLSX.gettable(SAMdataX["SAMdataPlus"], header=false)
 SAMdata = DataFrames.DataFrame(SAMdataY[1])
 SAMdata = NamedArray(convert(Matrix,SAMdata[2:size(SAMdata,1),2:size(SAMdata,2)]),(SAMdata[2:end,1],values.(SAMdata[1,2:end]))) #Named Array to use row names
@@ -16,8 +19,10 @@ SAMdata = NamedArray(convert(Matrix,SAMdata[2:size(SAMdata,1),2:size(SAMdata,2)]
 #set # sectors from data
 numsectors = count(x -> occursin("Sec", string(x)), names(SAMdata[:1,:])[1])
 sectors = Array{Int64}(undef, 1, numsectors); for i in 1:numsectors; sectors[i] = i; end
-numcommonds = convert(Int64,SAMdata[1,"numcommonds"]) #So far as factor in data sheet (until commods get own SAM row/columns)
-commods = Array{Int64}(undef, 1, numcommonds); for i in 1:numcommonds; commods[i] = i; end
+
+numcommods = count(x -> occursin("Commod-", string(x)), names(SAMdata[:1,:])[1])
+#convert(Int64,SAMdata[1,"numcommods"]) #So far as factor in data sheet (until commods get own SAM row/columns)
+commods = Array{Int64}(undef, 1, numcommods); for i in 1:numcommods; commods[i] = i; end
 
 # Initial Values
 rKi = 1                     #initial return to Kapital
@@ -27,9 +32,11 @@ Pr_W_Im_foreignCurri = SAMdata[sectors,"Pr_W_Im_foreignCurri"][][:] # Initial pr
 Pr_W_Exp_foreignCurri = SAMdata[sectors,"Pr_W_Exp_foreignCurri"][][:] # Initial prices of Exports at World price in foreign currency
 Pr_Commods_toHomei = SAMdata[sectors,"Pr_Commods_toHomei"][][:] # Initial prices of Domestic commodity/output of firm to domestic market
 Pr_CombCommods_toHomei = SAMdata[sectors,"Pr_CombCommods_toHomei"][][:] # Initial Prices of Combined Domestic and Foreign commodities to home market
-Kdi = SAMdata["Kdi",sectors][][:]  #initial Kapital demand
-Ldi = SAMdata["Ldi",sectors][][:]  #initial Labour demand
-Cdi = SAMdata["Cdi",sectors][][:]  #initial Consumer Demand for Commodities (from data)
+Kdi = SAMdata["Kdi",1+numcommods:numcommods+numsectors][][:]  #initial Kapital demand
+Ldi = SAMdata["Ldi",1+numcommods:numcommods+numsectors][][:]  #initial Labour demand
+# Cdi = SAMdata["Cdi",1+numcommods:numcommods+numsectors][][:]  #initial Consumer Demand for Commodities (from data)
+"Caution: HH Final demand doesn't seem to be used in EcoMod, and unclear how to translate Cdi [CZ(sec)]"
+Cdi = SAMdata[1:numcommods,"HH"][][:]  #initial Consumer Demand for Commodities (from data)
 GKdi = SAMdata["Kdi","Gov"] #initial Govt Kapital demand (from data)
 GLdi = SAMdata["Ldi","Gov"] #initial Govt Labour demand (from data)
 GSavi = SAMdata["SavInv","Gov"] # Government Savings (0: balanced budget, >0: surplus, <0: deficit )
@@ -37,21 +44,23 @@ TaxInRevi = SAMdata["TaxIn","HH"] #Inititial Income tax
 UnemplBenRate = SAMdata[1,"UnemplBenRate"] #What proportion wage HH gets if unemployed
 Transfi = SAMdata["HH","Gov"] #Government direct tranfers to Households
 TransfOthi = 15. # Other Transfers... I don't understand where this fits in the SAM...
-GovCdi = SAMdata[numsectors+1:numsectors+numcommonds,"Gov"][][:] # Government purchased from firms 
-TaxCRevi = SAMdata["TaxC", numsectors+1:numsectors+numcommonds][][:]    #initial Consumption tax
-TaxKRevi = SAMdata["TaxK",sectors][][:]    #initial Kapital use tax
-TaxLRevi = SAMdata["TaxL",sectors][][:]   #initial Payroll tax? (labour use)
+GovCdi = SAMdata[1:numcommods,"Gov"][][:] # Government purchased from firms ###SAMdataPlus-BEA
+# GovCdi = SAMdata[numsectors+1:numsectors+numcommods,"Gov"][][:] # Government purchased from firms ##SAMdataPlus (commods after Secs)
+TaxCRevi = SAMdata["TaxC", 1:numcommods][][:]    #initial Consumption tax
+# TaxCRevi = SAMdata["TaxC", numsectors+1:numsectors+numcommods][][:]    #initial Consumption tax ##SAMdataPlus (commods after Secs)
+TaxKRevi = SAMdata["TaxK",1+numcommods:numcommods+numsectors][][:]    #initial Kapital use tax
+TaxLRevi = SAMdata["TaxL",1+numcommods:numcommods+numsectors][][:]   #initial Payroll tax? (labour use)
 
 ForeignSavi = SAMdata["SavInv","RoW"]
 #create base nominal initial Commodity Price = 1 for each sector ##the if is just for running single lines during debugging etc
 CPi = []; if length(CPi)<length(sectors); for i in 1:length(sectors); push!(CPi, 1); end; end #initial Commodity Price Level (1 for each sector commod)
-Invi = SAMdata[numsectors+1:numsectors+numcommonds,"InvSav"][][:]        #Initial Investment (from data)
-Expi = SAMdata["Expi",sectors][][:]         #Initial Export demand (from data)
-Impi = SAMdata["Impi",sectors][][:]         #Initial Import demand (from data)
-TaxImpRevi = SAMdata["TaxImp",numsectors+1:numsectors+numcommonds][][:] #initial Import tax (tariff) revenue
+Invi = SAMdata[1:numcommods,"InvSav"][][:]        #Initial Investment (from data)
+Expi = SAMdata[1:numcommods,"RoW"][]         #Initial Export demand (from data)
+Impi = SAMdata["RoW",1:numcommods][]         #Initial Import demand (from data)
+TaxImpRevi = SAMdata["TaxImp",1:numcommods][][:] #initial Import tax (tariff) revenue
 Kei = sum(Kdi) + GKdi                       #initial Kapital endowment (assume supply = demand?)
 if montec =="yes"
-    Unempli = rand(5:50)
+    Unempli = rand(4:20)
 else
     Unempli = SAMdata[1,"Unempli"]               #initial level of unemployment
 end
@@ -60,12 +69,12 @@ Lei = sum(Ldi) + GLdi + Unempli    #initial Labour endowment
 
 Pr_Exp_DomCurri = Pr_W_Exp_foreignCurri * XRatei # Export Prices
 
-# Loop to build IO square sector by sector array from csv data with n sectors
-# IMPORTANT: Now works for Commodities x Sectors, with sectors as first columns and rows and commods as next columns and rows
+# Loop to build IO square sector by sector array from Excel data with n sectors
+# IMPORTANT: Now works for Commodities x Sectors, with commods as first columns and rows and secotrs as next columns and rows
 IOi = Array{Int64}(undef,length(sectors),length(sectors))
-for i in numsectors+1:numsectors+numcommonds; 
-    for j in 1:length(sectors)
-        IOi[i-numsectors,j] = SAMdata[i,j]; end; end
+for i in 1:length(sectors) 
+    for j in numcommods+1:numsectors+numcommods
+        IOi[i,j-numsectors] = Int(round(SAMdata[i,j])); end; end 
 
 YOuti =  sum(IOi,dims=1)[:] + Kdi + TaxKRevi + Ldi + TaxLRevi  #initial gross Total income (by sector)
 Yout_toHomei = YOuti - Expi                         # Domestic consumption from domestic production (everything - exports)
@@ -81,6 +90,7 @@ TaxLRate = TaxLRevi./Ldi.*wLi                    # Labour use tax rate from data
 TaxCRatei = TaxCRate                             # initial Consumption tax rate (for Price Index)
 TaxInRate = TaxInRevi/YIni                       #Income tax rate from data (Revenue/Total Income)
 TaxImpRate = TaxImpRevi./(Impi.*Pr_W_Im_foreignCurri * XRatei) #Imports tax rate (tarrifs) from data (Revenue/Total Imports)
+replace!(TaxImpRate, NaN=>0)
 Pr_Im_DomCurri = (1 .+ TaxImpRate) .* Pr_W_Im_foreignCurri * XRatei # Import prices at domestic currency
 
 #Factors
@@ -109,9 +119,9 @@ TransElasexp_Yout  = 1 ./(1 .+(Pr_Commods_toHomei./Pr_Exp_DomCurri).*(Expi ./You
 ShiftParTransElas_Yout = YOuti./(TransElasexp_Yout.*Expi.^((TransformElasi .-1)./TransformElasi) .+
  (1 .- TransElasexp_Yout).*Yout_toHomei .^ ((TransformElasi .-1)./TransformElasi)).^(TransformElasi ./(TransformElasi .-1)) #...
 
-GovUExpC = Pr_CombCommods_toHomei.*GovCdi/(TaxTotRevi-Transfi-PrIndi*GSavi)
-GovUExpL = wLi * GLdi/(TaxTotRevi-Transfi-PrIndi*GSavi)
-GovUExpK = rKi * GKdi/(TaxTotRevi-Transfi-PrIndi*GSavi)
+GovUExpC = Pr_CombCommods_toHomei.*GovCdi/(TaxTotRevi-Transfi-PrIndi*GSavi) #Exponent for Government ....
+GovUExpL = wLi * GLdi/(TaxTotRevi-Transfi-PrIndi*GSavi) #Exponent for Government ....
+GovUExpK = rKi * GKdi/(TaxTotRevi-Transfi-PrIndi*GSavi) #Exponent for Government ....
 
 #Variables at Initial (equilibrium) levels for the endogenous variables and lower bounds to prevent numerical problems in opt
 #Labor and Kapital
@@ -268,13 +278,13 @@ print("Ld_f[2]=       ",JuMP.value(Ld_f[2]),"\n")
 print("Ld_f[3]=       ",JuMP.value(Ld_f[3]),"\n")
 print("Ld_f[4]=       ",JuMP.value(Ld_f[4]),"\n")
 print("Ld_f[5]=       ",JuMP.value(Ld_f[5]),"\n")
-print("Ld_f[6]=       ",JuMP.value(Ld_f[6]),"\n")
+# print("Ld_f[6]=       ",JuMP.value(Ld_f[6]),"\n")
 print("Kd_f[1]=       ",JuMP.value(Kd_f[1]),"\n")
 print("Kd_f[2]=       ",JuMP.value(Kd_f[2]),"\n")
 print("Kd_f[3]=       ",JuMP.value(Kd_f[3]),"\n")
 print("Kd_f[4]=       ",JuMP.value(Kd_f[4]),"\n")
 print("Kd_f[5]=       ",JuMP.value(Kd_f[5]),"\n")
-print("Kd_f[6]=       ",JuMP.value(Kd_f[6]),"\n")
+# print("Kd_f[6]=       ",JuMP.value(Kd_f[6]),"\n")
 print("Pr_Commods[1]= ",JuMP.value(Pr_Commods[1]),"\n")
 print("Pr_Commods[2]= ",JuMP.value(Pr_Commods[2]),"\n")
 print("Commodsd_HH[1]=",JuMP.value(Commodsd_HH[1]),"\n")
