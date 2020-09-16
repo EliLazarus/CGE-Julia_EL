@@ -1,6 +1,8 @@
 "Basic Monte Carlo function, parameter distribution sampling in Main script (so far)"
-n = 8 # how many runs
-using NamedArrays
+# CGE-J-EL_Main has to be run once first (so far)
+
+n = 100 # how many runs
+using NamedArrays, DataFrames
 MC_Results = DataFrame()
 
 function mc()
