@@ -1,4 +1,4 @@
-This project is inactive and closed.<br>
+This project is inactive and closed.<br> 
 Probably you are looking for [https://github.com/julia-mpsge/MPSGE.jl](https://github.com/julia-mpsge/MPSGE.jl). <p>
 [MPSGE.jl](https://julia-mpsge.github.io/MPSGE.jl) is a Julia package to enable simpler and free CGE modelling integrated into an efficient general use scientific programming language. The package allows for building models by just structuring the data and providing elasticity parameters, following from Tom Rutherford's MPSGE in GAMS.
 </p>
